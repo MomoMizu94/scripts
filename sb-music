@@ -1,0 +1,57 @@
+#!/bin/sh
+# Music player block for dwmblocks (Spotify + Firefox support)
+
+export LANG=en_US.UTF-8
+
+SPOTIFY=spotify
+BROWSER=firefox
+FORMAT_FILE="/tmp/dwmblocks_mus_format"
+
+# Get player statuses FIRST
+BROWSER_STATUS=$(playerctl --player="$BROWSER" status 2>/dev/null)
+SPOTIFY_STATUS=$(playerctl --player="$SPOTIFY" status 2>/dev/null)
+
+# Handle clicks
+case "$BUTTON" in
+    1)  # Left click: Toggle play/pause whichever player is active
+        if [ "$BROWSER_STATUS" = "Playing" ] || [ "$BROWSER_STATUS" = "Paused" ]; then
+            playerctl --player="$BROWSER" play-pause
+        elif [ "$SPOTIFY_STATUS" = "Playing" ] || [ "$SPOTIFY_STATUS" = "Paused" ]; then
+            playerctl --player="$SPOTIFY" play-pause
+        fi
+        pkill -RTMIN+17 "${STATUSBAR:-dwmblocks}"
+        exit ;;
+
+    2)  # Middle click: Open Spotify GUI
+        setsid -f spotify-launcher >/dev/null 2>&1 &
+        exit ;;
+
+    3)  # Right click: Edit script
+        setsid "$TERMINAL" -e "$EDITOR" "$HOME/.local/bin/sb-music" &
+        exit ;;
+esac
+
+# Choose active player
+if [ "$BROWSER_STATUS" = "Playing" ]; then
+    PLAYER=$BROWSER
+    ICON=" 󰈹 "
+    NORMAL=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(title,25) }}')
+    ALTERNATE=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(artist,17) }} - {{ trunc(title,17) }}')
+elif [ "$SPOTIFY_STATUS" = "Playing" ] || [ "$SPOTIFY_STATUS" = "Paused" ]; then
+    PLAYER=$SPOTIFY
+    ICON="  "
+    NORMAL=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(artist,17) }} - {{ trunc(title,17) }}')
+    ALTERNATE=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(album,17) }} - {{ trunc(title,17) }}')
+else
+    echo "  zZz"
+    exit
+fi
+
+# Format toggle logic
+[ ! -f "$FORMAT_FILE" ] && echo "0" > "$FORMAT_FILE"
+read FORMAT < "$FORMAT_FILE"
+
+# Output display
+[ "$FORMAT" -eq 0 ] && INFO="$NORMAL" || INFO="$ALTERNATE"
+echo "$ICON$INFO"
+

@@ -1,0 +1,25 @@
+#!/bin/sh
+# RAM usage
+
+export LANG=en_US.UTF-8
+
+# Sensor info
+memuse=$(free -m | awk '/^Mem/ {printf "%.1f\n", $3/1024}')
+memuse2=$(free -m | awk '/^Mem/ {printf "%.2f\n", $3/1024}')
+
+
+# Sending to bar
+echo $memuse"G"
+
+case $BUTTON in
+
+    1) # Left click: Send notification
+        notify-send "  RAM Usage" "Used: ${memuse2} GB" ;;
+        
+    2) # Middle click: Open btop in terminal
+        setsid "$TERMINAL" -e btop & ;;
+
+    3) # Right click: Open this script in nvim
+        setsid "$TERMINAL" -e "$EDITOR" "$HOME/.local/bin/mem-usage" & ;;
+
+esac

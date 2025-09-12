@@ -1,0 +1,23 @@
+#!/bin/sh
+# CPU temp
+
+export LANG=en_US.UTF-8
+
+# Sensor info
+cputemp=$(sensors | awk '/^Tctl/ {print $2}' | sed 's/+//;s/\..*$//')
+
+# Sending to bar
+echo ${cputemp}"°C"
+
+case $BUTTON in
+    
+    1) # Left click: open coolercontrol GUI
+        setsid xdg-open "http://localhost:11987" & ;;
+    
+    2) # Middle click: open btop in terminal
+        setsid "$TERMINAL" -e btop & ;;
+    
+    3) # Right click: open this script in nvim
+        setsid "$TERMINAL" -e "$EDITOR" "$HOME/.local/bin/cpu-temp" & ;;
+
+esac

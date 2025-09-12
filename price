@@ -1,0 +1,43 @@
+#!/bin/sh
+
+export LANG=en_US.UTF-8
+
+[ -z "$1" ] && exit 1
+
+url="https://min-api.cryptocompare.com/data/price?fsym=$1&tsyms=USD"
+target="$1"
+name="${2:-$1}"
+icon="${3:-💰}"
+
+# Detect button clicks
+case $BUTTON in
+
+  1) # Left click: Open coin price chart
+      coin=$(echo "$target" | cut -d'-' -f1)
+      setsid "$TERMINAL" -e bash -c "curl rate.sx/$coin@365d?c=usd; echo; echo 'Press any key to close...'; read -n 1" & ;;
+
+  2) # Middle click: Update coin prices 
+      notify-send "🔄 Updating $name price..." "Fetching new price from CryptoCompare..."
+      kill -RTMIN+11 "$(pidof dwmblocks)" ;;
+
+  3) # Right click: Open script in neovim
+      setsid "$TERMINAL" -e "$EDITOR" "$HOME/.local/bin/price" & ;;
+
+esac
+
+
+
+# Fetch the price from CryptoCompare using curl
+response=$(curl -s "$url")
+
+# Use awk to extract the price
+price=$(echo "$response" | awk -F'"USD":' '{print $2}' | awk -F'}' '{print $1}' | tr -d '"')
+
+if [ -n "$price" ]; then
+  # Successfully fetched price
+  printf "%s%s%0.2f" " $icon " "$" "$price"
+else
+  # Error fetching price
+  echo "Error: Unable to fetch price data."
+fi
+
