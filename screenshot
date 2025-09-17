@@ -14,25 +14,63 @@ FILEPATH="${OUTDIR}/${STAMP}"
 # Tool selection and error handling based on given argument
 case "${1:-}" in
     -full)
+        # Tool detection
         if ! command -v import &>/dev/null; then
             notify-send "Screenshot Tool Missing" "'import' Tool Is Not Installed!"
             echo "Error: couldn't find 'import'."; exit 1
         fi
+
+        # Save fullscreen to a file & notify
         import -window root "${FILEPATH}"
+        notify-send -i "${FILEPATH}" "Screenshot Taken" "Saved as ${STAMP} in ${OUTDIR}"
         ;;
 
     -area)
-        if ! command -v scrot &>/dev/null; then
-            notify-send "Screenshot Tool Missing" "'scrot' Tool Is Not Installed!"
-            echo "Error: couldn't fing 'scrot'."; exit 1
+        # Tool detection
+        if ! command -v import &>/dev/null; then
+            notify-send "Screenshot Tool Missing" "'import' Tool Is Not Installed!"
+            echo "Error: couldn't fing 'import'."; exit 1
         fi
-        scrot --select "${FILEPATH}"
-        ;;
-    *)
 
-        echo "Usage: $0 -full | -area"
+        # Save selection to a file & notify
+        import "${FILEPATH}"
+        notify-send -i "${FILEPATH}" "Screenshot Taken" "Saved as ${STAMP} in ${OUTDIR}"
+        ;;
+
+    -copy_full)
+        # Tool detection
+        if ! command -v xclip import &>/dev/null; then
+            notify-send "Clipboard Tool Missing" "'xclip' Tool Is Not Installed!"
+            echo "Error: couldn't find 'xclip'."; exit 1
+        fi
+        if ! command -v import &>/dev/null; then
+            notify-send "Screenshot Tool Missing" "'import' Tool Is Not Installed!"
+            echo "Error: couldn't find 'import'."; exit 1
+        fi
+
+        # Capture fullscreen to clip & notify
+        import -window root png:- | xclip -selection clipboard -t image/png -i
+        notify-send "Screenshot Copied" "Fullscreen Image Copied To Clipboard!"
+        ;;
+
+    -copy_area)
+        # Tool detection
+        if ! command -v xclip import &>/dev/null; then
+            notify-send "Clipboard Tool Missing" "'xclip' Tool Is Not Installed!"
+            echo "Error: couldn't find 'xclip'."; exit 1
+        fi
+        if ! command -v import &>/dev/null; then
+            notify-send "Screenshot Tool Missing" "'import' Tool Is Not Installed!"
+            echo "Error: couldn't find 'import'."; exit 1
+        fi
+
+        # Copy selection to clip & notify
+        import png:- | xclip -selection clipboard -t image/png -i
+        notify-send "Screenshot Copied" "Selection Copied To Clipboard!"
+        ;;
+
+    *)
+        echo "Usage: $0 -full | -area | -copy_full | -copy_area"
         exit 1
         ;;
 esac
-
-notify-send -i "${FILEPATH}" "Screenshot Taken" "Saved as ${STAMP} in ${OUTDIR}"
