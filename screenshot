@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+export DISPLAY="${DISPLAY:-:0}"
+
+# Output directory for the screenshots
+OUTDIR="${HOME}/Pictures/Screenshots"
+mkdir -p "${OUTDIR}"
+
+# Build filename + path
+STAMP="$(date +%Y-%m-%d_%H-%M).png"
+FILEPATH="${OUTDIR}/${STAMP}"
+
+# Tool selection and error handling based on given argument
+case "${1:-}" in
+    -full)
+        if ! command -v import &>/dev/null; then
+            notify-send "Screenshot Tool Missing" "'import' Tool Is Not Installed!"
+            echo "Error: couldn't find 'import'."; exit 1
+        fi
+        import -window root "${FILEPATH}"
+        ;;
+
+    -area)
+        if ! command -v scrot &>/dev/null; then
+            notify-send "Screenshot Tool Missing" "'scrot' Tool Is Not Installed!"
+            echo "Error: couldn't fing 'scrot'."; exit 1
+        fi
+        scrot --select "${FILEPATH}"
+        ;;
+    *)
+
+        echo "Usage: $0 -full | -area"
+        exit 1
+        ;;
+esac
+
+notify-send -i "${FILEPATH}" "Screenshot Taken" "Saved as ${STAMP} in ${OUTDIR}"
