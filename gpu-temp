@@ -4,15 +4,15 @@
 export LANG=en_US.UTF-8
 
 # Sensor info
-gputemp=$(sensors | awk '/^junction/ { gsub (/\+/,""); gsub(/\..*/,"",$2); print $2}')
+gputemp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits)
 
 # Sending to bar
 echo $gputemp"°C"
 
 case $BUTTON in
     
-    1) # Left click: Open lact
-        setsid lact & ;;
+    1) # Left click: Do nothing
+        : ;;
 
     2) # Middle click: Open btop
         setsid "$TERMINAL" -e btop & ;;
