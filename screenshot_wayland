@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Output directory
+OUTDIR="${HOME}/Pictures/Screenshots"
+mkdir -p "${OUTDIR}"
+
+STAMP="$(date +%Y-%m-%d_%H-%M).png"
+FILEPATH="${OUTDIR}/${STAMP}"
+
+# Ensure required tools exist
+need() {
+    if ! command -v "$1" &>/dev/null; then
+        notify-send "Missing Tool" "'$1' is not installed!"
+        exit 1
+    fi
+}
+
+case "${1:-}" in
+    -area)
+        need grim
+        need slurp
+
+        grim -g "$(slurp)" "${FILEPATH}"
+        notify-send -i "${FILEPATH}" "Screenshot Taken" "Saved as ${STAMP} in ${OUTDIR}"
+        ;; 
+
+    -copy_area)
+        need grim
+        need slurp
+        need wl-copy
+
+        grim -g "$(slurp)" - | wl-copy --type image/png
+        notify-send "Screenshot Copied" "Selected area copied to clipboard"
+        ;;
+
+    *)
+        echo "Usage: $0 -area | -copy_area"
+        exit 1
+        ;;
+esac
+
