@@ -5,11 +5,13 @@ export LANG=en_US.UTF-8
 
 SPOTIFY=spotify
 BROWSER=firefox
+TIDAL=$(playerctl -l | grep chromium.instance || true)
 FORMAT_FILE="/tmp/dwmblocks_mus_format"
 
 # Get player statuses FIRST
 BROWSER_STATUS=$(playerctl --player="$BROWSER" status 2>/dev/null)
 SPOTIFY_STATUS=$(playerctl --player="$SPOTIFY" status 2>/dev/null)
+TIDAL_STATUS=$(playerctl --player="$TIDAL" status 2>/dev/null)
 
 # Handle clicks
 case "$BUTTON" in
@@ -18,12 +20,15 @@ case "$BUTTON" in
             playerctl --player="$BROWSER" play-pause
         elif [ "$SPOTIFY_STATUS" = "Playing" ] || [ "$SPOTIFY_STATUS" = "Paused" ]; then
             playerctl --player="$SPOTIFY" play-pause
+        elif [ "$TIDAL_STATUS" = "Playing" ] || [ "$TIDAL_STATUS" = "Paused" ]; then
+            playerctl --player="$TIDAL" play-pause
         fi
         pkill -RTMIN+17 "${STATUSBAR:-dwmblocks}"
         exit ;;
 
-    2)  # Middle click: Open Spotify GUI
-        setsid -f spotify-launcher >/dev/null 2>&1 &
+    2)  # Middle click: Open Spotify/Tidal GUI
+        #setsid -f spotify-launcher >/dev/null 2>&1 &
+        setsid -f tidal-hifi >/dev/null 2>&1 &
         exit ;;
 
     3)  # Right click: Edit script
@@ -42,6 +47,11 @@ elif [ "$SPOTIFY_STATUS" = "Playing" ] || [ "$SPOTIFY_STATUS" = "Paused" ]; then
     ICON="  "
     NORMAL=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(artist,17) }} - {{ trunc(title,17) }}')
     ALTERNATE=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(album,17) }} - {{ trunc(title,17) }}')
+elif [ "$TIDAL_STATUS" = "Playing" ] || [ "$TIDAL_STATUS" = "Paused" ]; then
+    PLAYER=$TIDAL
+    ICON=" 󰇈 "
+    NORMAL=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(artist,17) }} - {{ trunc(title,17) }}')
+    ALTERNATE=$(playerctl --player="$PLAYER" metadata --format '{{ trunc(album,17) }} - {{ trunc(title,17) }}')
 else
     echo "  zZz"
     exit
@@ -54,4 +64,3 @@ read FORMAT < "$FORMAT_FILE"
 # Output display
 [ "$FORMAT" -eq 0 ] && INFO="$NORMAL" || INFO="$ALTERNATE"
 echo "$ICON$INFO"
-
