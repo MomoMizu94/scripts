@@ -9,24 +9,43 @@ STEP=${STEP:-5}
 case "$1" in
     # Volume up 5%
     up)
-        pactl set-sink-volume @DEFAULT_SINK@ +${STEP}% ;;
+        wpctl set-volume -l 1.3 @DEFAULT_AUDIO_SINK@ ${STEP}%+ ;;
+
 
     # Volume down 5%
     down)
-        pactl set-sink-volume @DEFAULT_SINK@ -${STEP}% ;;
+        wpctl set-volume @DEFAULT_AUDIO_SINK@ ${STEP}%- ;;
 
     # Mute volume
     mute)
-        pactl set-sink-mute @DEFAULT_SINK@ toggle ;;
+        wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle ;;
 
     # Instructions
     *)
-        echo "Usage: $0 {up|down|mute}" >&2; exit 2 ;;
+        echo "Usage: $0 {up|down|mute}" >&2
+        exit 2
+        ;;
 esac
 
-MUTED=$(pactl get-sink-mute @DEFAULT_SINK@ | awk '{print $2}')
-VOLUME=$(pactl get-sink-volume @DEFAULT_SINK@ | grep -oE '[0-9]{1,3}%' | head -n1 | tr -d '%')
+#MUTED=$(pactl get-sink-mute @DEFAULT_SINK@ | awk '{print $2}')
+#VOLUME=$(pactl get-sink-volume @DEFAULT_SINK@ | grep -oE '[0-9]{1,3}%' | head -n1 | tr -d '%')
 
+# Read current volume & mute states
+VOLUME_INFO=$(wpctl get-volume @DEFAULT_AUDIO_SINK@)
+
+# Extract & convert volume info
+VOLUME=$(echo "$VOLUME_INFO" | awk '{print $2}')
+VOLUME=$(printf "%.0f" "$(echo "$VOLUME * 100" | bc)")
+
+# Detect muted
+echo "$VOLUME_INFO" | grep -q "\[MUTED\]"
+if [ $? -eq 0 ]; then
+    MUTED=yes
+else
+    MUTED=no
+fi
+
+# Notifications
 if [ "$1" = "mute" ]; then
     if [ "$MUTED" = "yes" ]; then
         notify-send -i audio-volume-muted "Volume Control" "Volume has been Muted!"
