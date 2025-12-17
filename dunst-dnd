@@ -1,0 +1,34 @@
+#!/bin/sh
+
+STATUSBAR="${STATUSBAR:-dwmblocks}"
+
+# Toggle on left click
+if [ "${BUTTON:-}" = "1" ]; then
+    dunstctl set-paused toggle >/dev/null 2>&1
+    
+    # Read new state and notify user
+    PAUSED="$(dunstctl is-paused 2>/dev/null)"
+
+    if [ "$PAUSED" = "true" ]; then
+        # No notification for dnd on as it would get displayed only once dnd has been turned off
+        :
+    else
+        # Notification
+        notify-send "Notification Center" "Notifications have been unpaused!"
+    fi
+
+    # Refresh dwmblocks once
+    pkill -RTMIN+3 "$STATUSBAR" 2>/dev/null
+fi
+
+# Output to dwmblocks
+PAUSED="$(dunstctl is-paused 2>/dev/null)"
+
+if [ "$PAUSED" = "true" ]; then
+    # Toggle dnd on
+    echo "󰂠  "
+else
+    # Toggle dnd off
+    echo "󰂞  "
+fi
+
