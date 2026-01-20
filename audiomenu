@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Safety checks
+set -euo pipefail
+
+# Rofi setup
+ROFI=(rofi -dmenu -i -p "" -mesg "Audio sink switcher" -theme-str 'mainbox { children: [ "message", "inputbar", "listview" ]; } message { enabled: true; }')
+
+# Notification helper
+notify() {
+    # First argument -> icon -> notification msg
+    local icon="$1"; shift
+    command -v notify-send >/dev/null 2>&1 && notify-send -i "$icon" "Audio Manager" "$1" || true
+}
+
+# pactl safety check
+command -v pactl >/dev/null 2>&1 || exit 1
+
+# Extract human-readable sink names from pactl
+get_sink_desc() {
+    local sink_name="$1"
+    pactl list sinks | awk -v n="$sink_name" '
+        $0 ~ "^[[:space:]]*Name: " n "$" {ins=1; next}
+        ins && $0 ~ /^[[:space:]]*Description:/ {
+            sub(/^[[:space:]]*Description:[[:space:]]*/, "", $0)
+            print
+            exit
+        }
+        ins && $0 ~ "^[[:space:]]*Name:" {ins=0}
+    '
+}
+
+# Current default sink
+DEFAULT_SINK="$(pactl get-default-sink)"
+
+# Builds menu data, shows human-readable sink names and stores actual sink data
+MENU="$(
+    pactl list short sinks | awk '{print $2}' | while read -r sink_name; do
+        DESC="$(get_sink_desc "$sink_name")"
+        [[ -z "${DESC:-}" ]] && DESC="$sink_name"
+
+        if [[ "$sink_name" == "$DEFAULT_SINK" ]]; then
+            printf "* %s\t%s\n" "$DESC" "$sink_name"
+        else
+            printf "  %s\t%s\n" "$DESC" "$sink_name"
+        fi
+    done
+)"
+
+# Show only the display column in rofi
+CHOICE="$(
+    printf "%s\n" "$MENU" | cut -f1 | "${ROFI[@]}"
+)" || exit 0
+[[ -z "${CHOICE:-}" ]] && exit 0
+
+# Mapping names back to actual sink names
+SINK="$(
+    printf "%s\n" "$MENU" | awk -F'\t' -v c="$CHOICE" '$1==c {print $2; exit}'
+)"
+LABEL="$(sed -n 's/^[* ]*//p' <<<"$CHOICE")"
+[[ -z "${SINK:-}" ]] && exit 1
+
+# Switch the default sink to the chosen sink & move current audio stream
+pactl set-default-sink "$SINK"
+pactl list short sink-inputs | awk '{print $1}' | while read -r INPUT; do
+    pactl move-sink-input "$INPUT" "$SINK" >/dev/null 2>&1 || true
+done
+
+# Notification setup - headphones icon as default, bluetooth icon for .bluez output
+ICON="audio-headphones"
+[[ "$SINK" == bluez_output.* ]] && ICON="bluetooth"
+notify "$ICON" "Switched output to: $LABEL"
