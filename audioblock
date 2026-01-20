@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Helper script for audiomenu's dwmblocks integration
+set -euo pipefail
+
+# Click actions from dwmblocks
+case "${BUTTON:-}" in
+
+    1) # Left click: Open audio menu sink switcher
+        audiomenu & ;;
+
+    3) # Right click: Edit the audio menu script
+        setsid "$TERMINAL" -e "$EDITOR" "$HOME/.local/bin/audiomenu" & ;;
+
+esac
+
+# Grabs default sink name
+DEFAULT="$(pactl get-default-sink 2>/dev/null || true)"
+[[ -z "${DEFAULT:-}" ]] && { echo " ?"; exit 0; }
+
+# Cleans the sink name to human-redable versions
+DESC="$(
+  pactl list sinks | awk -v n="$DEFAULT" '
+    $0 ~ "^[[:space:]]*Name: " n "$" {ins=1; next}
+    ins && $0 ~ /^[[:space:]]*Description:/ {
+      sub(/^[[:space:]]*Description:[[:space:]]*/, "", $0)
+      print; exit
+    }
+    ins && $0 ~ "^[[:space:]]*Name:" {ins=0}
+  '
+)"
+
+# Fallback to raw sink name if description not found
+DESC="${DESC:-$DEFAULT}"
+
+# Keep first 2 words for the status bar
+DESC="$(awk '{print $1, $2}' <<<"$DESC")"
+
+# Default icon: headphones
+ICON=""
+
+case "$DEFAULT" in
+
+    bluez_output.*)
+        # Bluetooth speaker icon
+        icon="󰦢" ;;
+
+esac
+
+# Echo to status bar
+echo "${ICON} ${DESC}"
