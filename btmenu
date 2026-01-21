@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Helpers
+ROFI=(rofi -dmenu -i -p "" -mesg "Bluetooth Manager" \
+  -theme-str 'mainbox { children: [ "message", "inputbar", "listview" ]; } message { enabled: true; }' \
+    -theme-str 'window { location: northwest; anchor: northwest; x-offset: 2750; y-offset: 45; }')
+
+notify() { command -v notify-send >/dev/null 2>&1 && notify-send -i bluetooth "Bluetooth Manager" "$1" || true; }
+
+command -v bluetoothctl >/dev/null 2>&1 || exit 1
+
+# Files
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/btmenu"
+KNOWN_FILE="$STATE_DIR/known_macs"
+mkdir -p "$STATE_DIR"
+touch "$KNOWN_FILE"
+
+# Functions for basic bluetoothctl commands
+bt_powered() {
+    bluetoothctl show | awk -F': ' '/Powered/ {print $2}'
+}
+
+bt_power_on()  { 
+    bluetoothctl power on  >/dev/null;
+}
+
+bt_power_off() { 
+    bluetoothctl power off >/dev/null;
+}
+
+ensure_agent() {
+    bluetoothctl agent on >/dev/null || true
+    bluetoothctl default-agent >/dev/null || true
+}
+
+remember_mac() {
+    local mac="$1"
+    grep -Fxq "$mac" "$KNOWN_FILE" || echo "$mac" >> "$KNOWN_FILE"
+}
+
+# Compiles list of paired & connected devices 
+paired_list() {
+    {
+        bluetoothctl devices Paired 2>/dev/null || true
+        bluetoothctl devices Connected 2>/dev/null || true
+    } | awk '$1=="Device" && $2 ~ /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/ {
+        mac=$2
+        $1=""; $2=""
+        sub(/^[[:space:]]+/, "")
+        if (!seen[mac]++) printf "%s\t%s\n", mac, $0
+        }
+    '
+}
+
+# Outputs only device name if available
+known_list() {
+    while read -r mac; do
+        [[ -z "$mac" ]] && continue
+        name="$(bluetoothctl info "$mac" 2>/dev/null | awk -F': ' '/^Name:/ {print $2; exit}')"
+        [[ -n "${name:-}" ]] && printf "%s\t%s\n" "$mac" "$name"
+    done < "$KNOWN_FILE"
+}
+
+# Notes connected devices with asterisk
+format_menu_line() {
+    local mac="$1" name="$2"
+    local connected
+    connected="$(bluetoothctl info "$mac" 2>/dev/null | awk -F': ' '/Connected/ {print $2}')"
+    if [[ "$connected" == "yes" ]]; then
+        printf "* %s  (%s)\n" "$name" "$mac"
+    else
+        printf "  %s  (%s)\n" "$name" "$mac"
+    fi
+}
+
+# Connects a device
+connect_mac() {
+    local mac="$1"
+    if bluetoothctl connect "$mac" >/dev/null 2>&1; then
+        remember_mac "$mac"
+        notify "Connected: $mac"
+        return 0
+    fi
+    return 1
+}
+
+# Disconnects a device
+disconnect_mac() {
+    local mac="$1"
+    bluetoothctl disconnect "$mac" >/dev/null 2>&1 || true
+    notify "Disconnected: $mac"
+}
+
+# Trusts a device 
+trust_mac() {
+    local mac="$1"
+    bluetoothctl trust "$mac" >/dev/null 2>&1 || true
+}
+
+# Pairs a device
+pair_mac() {
+    local mac="$1"
+    ensure_agent
+    if bluetoothctl pair "$mac" >/dev/null 2>&1; then
+        trust_mac "$mac"
+        remember_mac "$mac"
+        notify "Paired + trusted: $mac"
+        return 0
+    fi
+    notify "Pair failed: $mac"
+    return 1
+}
+
+# Removes a device from bluetoothctl & file for know devices
+remove_mac() {
+    local mac="$1"
+    bluetoothctl remove "$mac" >/dev/null 2>&1 || true
+    grep -vxF "$mac" "$KNOWN_FILE" > "$KNOWN_FILE.tmp" || true
+    mv "$KNOWN_FILE.tmp" "$KNOWN_FILE"
+    notify "Removed: $mac"
+}
+
+#### MENUS ####
+# Main menu options printed to rofi
+main_menu() {
+    local p="OFF"
+    [[ "$(bt_powered)" == "yes" ]] && p="ON"
+
+    printf "%s\n" \
+        "Power: $p (toggle)" \
+        "Connect / Disconnect Devices" \
+        "Scan & Pair New Devices" \
+        "Remove Paired Devices" \
+        "Quit" \
+    | "${ROFI[@]}"
+}
+
+# Paired devices' menu
+menu_paired() {
+    # Merged list of known + paired lists
+    local list
+    list="$(
+        { paired_list || true; known_list || true; } |
+        awk -F'\t' '!seen[$1]++'
+    )"
+
+    [[ -z "$list" ]] && { notify "No paired devices"; return 0; }
+
+    # Formats entry names
+    local menu=""
+    while IFS=$'\t' read -r mac name; do
+        menu+=$(format_menu_line "$mac" "$name")$'\n'
+    done <<< "$list"
+
+    # On user selection, remembers mac & toggles connect/disconnect based on current state
+    local choice
+    choice="$(printf "%s" "$menu" | "${ROFI[@]}")" || return 0
+    [[ -z "${choice:-}" ]] && return 0
+
+    local mac
+    mac="$(sed -n 's/.*(\([0-9A-Fa-f:]\+\)).*/\1/p' <<<"$choice")"
+    [[ -z "${mac:-}" ]] && return 0
+
+    local connected
+    connected="$(bluetoothctl info "$mac" 2>/dev/null | awk -F': ' '/Connected/ {print $2}')"
+
+    if [[ "$connected" == "yes" ]]; then
+        disconnect_mac "$mac"
+    else
+        connect_mac "$mac" || notify "Connect failed (out of range?): $mac"
+    fi
+}
+
+# Scan for devices menu
+menu_scan_pair() {
+  [[ "$(bt_powered)" == "yes" ]] || bt_power_on
+  notify "Scanning..."
+
+  scan_out="$(bluetoothctl --timeout 8 scan on 2>/dev/null || true)"
+
+  paired_macs="$(bluetoothctl paired-devices 2>/dev/null | awk '{print $2}' || true)"
+
+  # Forms a list of scanned devices, filters out paired macs
+  list="$(
+    printf "%s\n" "$scan_out" |
+      awk '
+        # Matches lines like:
+        # "NEW Device AA:BB:CC:DD:EE:FF Name..."
+        # or "Device AA:BB:CC:DD:EE:FF Name..."
+        match($0, /(NEW )?Device ([0-9A-Fa-f:]{17}) (.+)$/, m) {
+          mac=m[2]; name=m[3]
+          if (!seen[mac]++) printf "%s\t%s\n", mac, name
+        }
+      ' |
+      awk -v pm="$paired_macs" '
+        BEGIN {
+          n = split(pm, a, /[[:space:]]+/)
+          for (i=1; i<=n; i++) if (a[i] != "") paired[a[i]] = 1
+        }
+        !paired[$1] { print }
+      '
+  )"
+
+  [[ -z "${list:-}" ]] && { notify "No new (unpaired) devices found"; return 0; }
+
+  local menu=""
+  while IFS=$'\t' read -r mac name; do
+    menu+=$(printf "  %s  (%s)" "$name" "$mac")$'\n'
+  done <<< "$list"
+
+  local choice
+  choice="$(printf "%s" "$menu" | "${ROFI[@]}")" || return 0
+  [[ -z "${choice:-}" ]] && return 0
+
+  local mac
+  mac="$(sed -n 's/.*(\([0-9A-Fa-f:]\+\)).*/\1/p' <<<"$choice")"
+  [[ -z "${mac:-}" ]] && return 0
+
+  pair_mac "$mac" || return 0
+  connect_mac "$mac" || notify "Paired, but connect failed: $mac"
+}
+
+# Remove device menu
+menu_remove() {
+  local list
+  # Lists paired devices
+  list="$(paired_list || true)"
+  [[ -z "$list" ]] && { notify "No paired devices"; return 0; }
+
+  local menu=""
+  while IFS=$'\t' read -r mac name; do
+    menu+=$(printf "  %s  (%s)" "$name" "$mac")$'\n'
+  done <<< "$list"
+
+  # On choice, remove selected device
+  local choice
+  choice="$(printf "%s" "$menu" | "${ROFI[@]}")" || return 0
+  [[ -z "${choice:-}" ]] && return 0
+
+  local mac
+  mac="$(sed -n 's/.*(\([0-9A-Fa-f:]\+\)).*/\1/p' <<<"$choice")"
+  [[ -z "${mac:-}" ]] && return 0
+
+  remove_mac "$mac"
+}
+
+# Main
+while true; do
+  sel="$(main_menu)" || exit 0
+  case "$sel" in
+    "Power: ON (toggle)")
+      bt_power_off
+      notify "Power: OFF"
+      ;;
+    "Power: OFF (toggle)")
+      bt_power_on
+      notify "Power: ON"
+      ;;
+    "Paired devices (connect/disconnect)")
+      [[ "$(bt_powered)" == "yes" ]] || bt_power_on
+      menu_paired
+      ;;
+    "Scan & pair new device")
+      menu_scan_pair
+      ;;
+    "Remove paired device")
+      [[ "$(bt_powered)" == "yes" ]] || bt_power_on
+      menu_remove
+      ;;
+    "Quit"|*)
+      exit 0
+      ;;
+  esac
+done
+

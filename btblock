@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BTMENU="${HOME}/.local/bin/btmenu"
+
+# Clickable module
+case "${BUTTON:-}" in
+
+    1) # Left click: Open menu
+        "$BTMENU" & disown;
+        exit 0 ;;
+
+    3) # Right click: Open script
+        setsid "$TERMINAL" -e "$EDITOR" "$HOME/.local/bin/btmenu" & ;;
+
+esac
+
+POWERED="$(bluetoothctl show 2>/dev/null | awk -F': ' '/Powered/ {print $2; exit}')"
+
+# If not powered on
+if [[ "$POWERED" != "yes" ]]; then
+
+    echo "󰂲"
+    exit 0
+
+fi
+
+# Find a connected device name
+connected_name="$(
+    bluetoothctl devices Connected 2>/dev/null |
+        awk '$1=="Device"{ $1=""; $2=""; sub(/^[[:space:]]+/, ""); print; exit }'
+)"
+
+# If connected -> display device name
+# Else just "on"
+if [[ -n "${connected_name:-}" ]]; then
+
+    echo "󰂱 ${connected_name}"
+
+else
+
+    echo ""
+
+fi
