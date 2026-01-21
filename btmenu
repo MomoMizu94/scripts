@@ -257,14 +257,14 @@ while true; do
       bt_power_on
       notify "Power: ON"
       ;;
-    "Paired devices (connect/disconnect)")
+    "Connect / Disconnect Devices")
       [[ "$(bt_powered)" == "yes" ]] || bt_power_on
       menu_paired
       ;;
-    "Scan & pair new device")
+    "Scan & Pair New Devices")
       menu_scan_pair
       ;;
-    "Remove paired device")
+    "Remove Paired Devices")
       [[ "$(bt_powered)" == "yes" ]] || bt_power_on
       menu_remove
       ;;
