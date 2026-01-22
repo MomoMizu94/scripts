@@ -18,7 +18,7 @@ touch "$KNOWN_FILE"
 
 # Functions for basic bluetoothctl commands
 bt_powered() {
-    bluetoothctl show | awk -F': ' '/Powered/ {print $2}'
+    bluetoothctl show | awk -F': ' '/Powered/ {print $2; exit}';
 }
 
 bt_power_on()  { 

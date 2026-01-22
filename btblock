@@ -1,44 +1,67 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -u
 
+# Directories for btmenu and cahche
 BTMENU="${HOME}/.local/bin/btmenu"
+CACHE="${$HOME}/.cache/dwmblocks-bt"
+mkdir -p "$(dirname "$CACHE")"
 
 # Clickable module
 case "${BUTTON:-}" in
 
     1) # Left click: Open menu
-        "$BTMENU" & disown;
-        exit 0 ;;
-
-    3) # Right click: Open script
-        setsid "$TERMINAL" -e "$EDITOR" "$HOME/.local/bin/btmenu" & ;;
+        "$BTMENU" & disown
+        exit 0
+        ;;
+        
+    3) # Right click: Open script in editor
+        setsid "${TERMINAL}" -e "${EDITOR}" "$BTMENU" >/dev/null 2>&1 &
+        exit 0
+        ;;
 
 esac
 
-POWERED="$(bluetoothctl show 2>/dev/null | awk -F': ' '/Powered/ {print $2; exit}')"
 
-# If not powered on
-if [[ "$POWERED" != "yes" ]]; then
+# Default output/fallback
+out="󰂲"
 
-    echo "󰂲"
-    exit 0
+# Query powered-state
+show="$(timeout 1s bluetoothctl show 2>/dev/null || true)"
+powered="$(awk -F': ' '/Powered/ {print $2; exit}' <<<"$show")"
 
-fi
+if [[ "$powered" != "yes" ]]; then
 
-# Find a connected device name
-connected_name="$(
-    bluetoothctl devices Connected 2>/dev/null |
-        awk '$1=="Device"{ $1=""; $2=""; sub(/^[[:space:]]+/, ""); print; exit }'
-)"
-
-# If connected -> display device name
-# Else just "on"
-if [[ -n "${connected_name:-}" ]]; then
-
-    echo "󰂱 ${connected_name}"
+    out="󰂲"
 
 else
 
-    echo ""
+    # Query connected devices
+    conn="$(timeout 1s bluetoothctl devices Connected 2>/dev/null || true)"
+    connected_name="$(awk '$1=="Device"{ $1=""; $2=""; sub(/^[[:space:]]+/, ""); print; exit }' <<<"$conn")"
+
+    # If device has name -> Show icon + name
+    if [[ -n "${connected_name:-}" ]]; then
+
+        out="󰂱 ${connected_name}"
+    
+    else
+        
+        # Else just show icon
+        out=""
+    
+    fi
 
 fi
+
+# Cache & print
+# Prints output & chaches it. In case of empty output -> print latest cached value
+if [[ -n "${out:-}" ]]; then
+    
+    printf "%s\n" "$out" | tee "$CACHE"
+
+else
+    
+    cat "$CACHE" 2>/dev/null || printf "%s\n" "󰂲"
+
+fi
+
