@@ -3,7 +3,7 @@ set -u
 
 # Directories for btmenu and cahche
 BTMENU="${HOME}/.local/bin/btmenu"
-CACHE="${$HOME}/.cache/dwmblocks-bt"
+CACHE="${HOME}/.cache/dwmblocks-bt"
 mkdir -p "$(dirname "$CACHE")"
 
 # Clickable module
