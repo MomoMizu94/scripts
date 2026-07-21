@@ -37,8 +37,30 @@ case "${1:-}" in
         notify-send -i "${TMPFILE}" "Screenshot Copied" "Selected area copied to clipboard"
         ;;
 
+    -monitor)
+        need grim
+        need hyprctl
+        need jq
+
+        MON="$(hyprctl -j monitors | jq -r '.[] | select(.focused==true) | .name')"
+        grim -o "${MON}" "${FILEPATH}"
+        notify-send -i "${FILEPATH}" "Screenshot Taken" "Saved ${STAMP} in ${OUTDIR}"
+        ;;
+
+    -copy_monitor)
+        need grim
+        need hyprctl
+        need jq
+        need wl-copy
+
+        MON="$(hyprctl -j monitors | jq -r '.[] | select(.focused==true) | .name')"
+        TMPFILE="$(mktemp --suffix=.png)"
+        grim -o "${MON}" "${TMPFILE}"
+        wl-copy --type image/png < "${TMPFILE}"
+        notify-send -i "${TMPFILE}" "Screenshot Copied" "${MON} copied to clipboard"
+        ;;
     *)
-        echo "Usage: $0 -area | -copy_area"
+        echo "Usage: $0 -area | -copy_area | -monitor | -copy_monitor"
         exit 1
         ;;
 esac
