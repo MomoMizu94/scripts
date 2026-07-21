@@ -6,7 +6,7 @@ set -euo pipefail
 OUTDIR="${HOME}/Pictures/Screenshots"
 mkdir -p "${OUTDIR}"
 
-STAMP="$(date +%Y-%m-%d_%H-%M).png"
+STAMP="$(date +%Y-%m-%d_%H-%M-%S).png"
 FILEPATH="${OUTDIR}/${STAMP}"
 
 # Ensure required tools exist
@@ -31,8 +31,10 @@ case "${1:-}" in
         need slurp
         need wl-copy
 
-        grim -g "$(slurp)" - | wl-copy --type image/png
-        notify-send "Screenshot Copied" "Selected area copied to clipboard"
+        TMPFILE="$(mktemp --suffix=.png)"
+        grim -g "$(slurp)" "${TMPFILE}"
+        wl-copy --type image/png < "${TMPFILE}"
+        notify-send -i "${TMPFILE}" "Screenshot Copied" "Selected area copied to clipboard"
         ;;
 
     *)
